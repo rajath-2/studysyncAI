@@ -1,0 +1,7 @@
+.worktrees/
+backend/.env
+.env
+.claude
+.agents/
+.pytest_cache/
+docs/

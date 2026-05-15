@@ -1,0 +1,8 @@
+# Pyrefly configuration
+# https://pyrefly.org/en/stable/configuration/
+
+python_interpreter = "backend/.venv/Scripts/python.exe"
+
+[[project]]
+root = "backend"
+search_path = ["backend"]
