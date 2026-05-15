@@ -5,3 +5,4 @@ backend/.env
 .agents/
 .pytest_cache/
 docs/
+skills-lock.*
