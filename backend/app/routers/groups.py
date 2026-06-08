@@ -3,6 +3,8 @@ from typing import Optional
 from app.middleware.auth import get_current_user
 from app.database import get_supabase_admin
 from app.services.compatibility_service import calculate_math_score
+from app.services.matching_service import matching_service
+from app.services.matching_service import matching_service
 
 groups_router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -257,6 +259,63 @@ async def get_pending_requests(
             })
 
     return {"requests": result_requests}
+
+
+@groups_router.post("/{group_id}/requests/{user_id}/analyze")
+async def analyze_pending_request(
+    group_id: str,
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate AI-powered analysis for a pending join request."""
+    supabase = get_supabase_admin()
+
+    # Check if user is admin
+    membership = supabase.table("group_members").select("*").eq("group_id", group_id).eq("user_id", current_user["user_id"]).eq("role", "admin").execute()
+    if not membership.data:
+        raise HTTPException(status_code=403, detail="Only admins can analyze requests")
+
+    # Verify the request is pending
+    pending_req = supabase.table("group_members").select("*").eq("group_id", group_id).eq("user_id", user_id).eq("status", "pending").execute()
+    if not pending_req.data:
+        raise HTTPException(status_code=404, detail="Pending request not found")
+
+    # Get requesting user's preferences
+    user_result = supabase.table("users").select("preferences", "full_name", "email").eq("id", user_id).execute()
+    if not user_result.data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_prefs = user_result.data[0].get("preferences", {})
+    user_name = user_result.data[0]["full_name"]
+
+    # Get group details
+    group_result = supabase.table("groups").select("*").eq("id", group_id).execute()
+    if not group_result.data:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    group = group_result.data[0]
+
+    # Get existing accepted members' preferences
+    members = supabase.table("group_members").select("user_id").eq("group_id", group_id).eq("status", "accepted").execute()
+    member_prefs = []
+    for m in members.data:
+        if m["user_id"] != user_id:
+            member_user = supabase.table("users").select("preferences", "full_name").eq("id", m["user_id"]).execute()
+            if member_user.data:
+                member_prefs.append(member_user.data[0])
+
+    # Generate AI analysis
+    analysis = await matching_service.get_match_reasoning(user_prefs, group, member_prefs)
+
+    return {
+        "user_id": user_id,
+        "user_name": user_name,
+        "group_id": group_id,
+        "group_name": group["name"],
+        "reasoning": analysis.get("reasoning", ""),
+        "suggestions": analysis.get("suggestions", [])
+    }
+
 
 @groups_router.post("/{group_id}/join")
 async def join_group(

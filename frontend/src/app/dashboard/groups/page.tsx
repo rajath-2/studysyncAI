@@ -6,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { Users, Clock, MoreHorizontal, Plus, Loader2, CheckCircle, XCircle, Video } from "lucide-react";
+import { Users, Clock, MoreHorizontal, Plus, Loader2, CheckCircle, XCircle, Video, Brain } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { groupsService, Group, PendingRequest } from "@/services/groups";
+import { groupsService, Group, PendingRequest, PendingRequestAiAnalysis } from "@/services/groups";
 import { CompatibilityBadge } from "@/components/groups/CompatibilityBadge";
 
 const SUBJECTS = ["Mathematics", "Computer Science", "Physics", "Chemistry", "Biology", "Literature", "History", "Economics", "Psychology"];
@@ -241,6 +241,10 @@ function JoinFlowModal({ group, isOpen, onClose, onSuccess }: { group: Group | n
 function RequestCard({ request, groupId, onAction }: { request: PendingRequest; groupId: string; onAction: () => void }) {
   const { token } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<PendingRequestAiAnalysis | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const handleAccept = async () => {
     if (!token) return;
@@ -272,6 +276,24 @@ function RequestCard({ request, groupId, onAction }: { request: PendingRequest; 
     }
   };
 
+  const handleAnalyze = async () => {
+    if (!token || aiAnalysis) return;
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    try {
+      const authData = JSON.parse(localStorage.getItem('auth-storage') || '{}');
+      const actualToken = authData.state?.token || token;
+      const analysis = await groupsService.analyzePendingRequest(groupId, request.user_id, actualToken);
+      setAiAnalysis(analysis);
+      setShowAnalysis(true);
+    } catch (error) {
+      console.error("Failed to analyze:", error);
+      setAnalysisError("Failed to generate AI analysis. Please try again.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   return (
     <Card className="mb-4">
       <CardContent className="pt-4">
@@ -285,14 +307,54 @@ function RequestCard({ request, groupId, onAction }: { request: PendingRequest; 
         {request.join_message && (
           <p className="text-sm text-muted-foreground mb-3 italic">"{request.join_message}"</p>
         )}
-        <div className="flex gap-2">
+        <div className="flex gap-2 mb-3">
           <Button size="sm" onClick={handleAccept} disabled={isLoading}>
             <CheckCircle className="h-4 w-4 mr-1" /> Accept
           </Button>
           <Button size="sm" variant="destructive" onClick={handleReject} disabled={isLoading}>
             <XCircle className="h-4 w-4 mr-1" /> Reject
           </Button>
+          <Button size="sm" variant="outline" onClick={handleAnalyze} disabled={isAnalyzing}>
+            {isAnalyzing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Brain className="h-4 w-4 mr-1" />}
+            AI Analysis
+          </Button>
         </div>
+
+        {/* AI Analysis Section */}
+        {analysisError && (
+          <p className="text-sm text-red-500 mb-2">{analysisError}</p>
+        )}
+        {showAnalysis && aiAnalysis && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="bg-muted/30 rounded-lg p-3 mb-2 border border-border/50"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Brain className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold text-primary">AI Fit Analysis</span>
+              <button
+                onClick={() => setShowAnalysis(false)}
+                className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+              >
+                Hide
+              </button>
+            </div>
+            <p className="text-sm text-foreground/90 leading-relaxed mb-3">
+              {aiAnalysis.reasoning}
+            </p>
+            {aiAnalysis.suggestions && aiAnalysis.suggestions.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">Suggestions:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {aiAnalysis.suggestions.map((suggestion, idx) => (
+                    <li key={idx} className="text-xs text-muted-foreground">{suggestion}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </motion.div>
+        )}
       </CardContent>
     </Card>
   );

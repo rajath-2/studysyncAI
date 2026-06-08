@@ -29,6 +29,15 @@ export interface GroupMember {
   user_name: string;
 }
 
+export interface PendingRequestAiAnalysis {
+  user_id: string;
+  user_name: string;
+  group_id: string;
+  group_name: string;
+  reasoning: string;
+  suggestions: string[];
+}
+
 export interface PendingRequest {
   id: string;
   user_id: string;
@@ -100,5 +109,9 @@ export const groupsService = {
 
   async rejectRequest(groupId: string, userId: string, token: string): Promise<void> {
     return fetchAPI<void>(`/groups/${groupId}/requests/${userId}`, { method: 'DELETE', token });
+  },
+
+  async analyzePendingRequest(groupId: string, userId: string, token: string): Promise<PendingRequestAiAnalysis> {
+    return fetchAPI<PendingRequestAiAnalysis>(`/groups/${groupId}/requests/${userId}/analyze`, { method: 'POST', token });
   },
 };
